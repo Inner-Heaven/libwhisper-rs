@@ -1,0 +1,7 @@
+format_strings = true
+reorder_imports = true
+reorder_imported_names = true
+where_style = "Rfc"
+control_style = "Rfc"
+write_mode = "overwrite"
+wrap_comments = true
