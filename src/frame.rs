@@ -1,10 +1,17 @@
 //! This is how frames look on the wire. This module doesn't handle Frame
 //! generation — generation is done in session module.
 
+use nom::{IResult, rest};
 use bytes::{BufMut, Bytes, BytesMut};
 use sodiumoxide::crypto::box_::{Nonce, PublicKey};
 
-/// How many bytes of overhead each frame has.
+use errors::{WhisperError, WhisperResult};
+
+
+/// How many bytes of overhead each frame has. Header consist of:
+/// - Session identificator. 32 bytes.
+/// - Nonce used to encrypt payload. 24 bytes.
+/// - Message type as u8 BigEndian. 1 byte.
 pub static HEADER_SIZE: usize = 57;
 
 
@@ -83,7 +90,6 @@ impl Frame {
         HEADER_SIZE + self.payload.len()
     }
 
-    /*
     /// Writes packed bytes to supplied buffer. This doesn't include legnth of
     /// the message.
     pub fn pack_to_buf(&self, buf: &mut BytesMut) {
@@ -94,24 +100,109 @@ impl Frame {
         buf.extend_from_slice(&self.payload);
         ()
     }
-    */
-    /*
+
     /// Pack frame header and its payload into Vec<u8>.
     pub fn pack(&self) -> Bytes {
         let mut frame = BytesMut::with_capacity(self.length());
         self.pack_to_buf(&mut frame);
         frame.freeze()
     }
-    */
 
-    /*
     /// Parse packed frame.
-    pub fn from_slice(i: &[u8]) -> LlsdResult<Frame> {
+    pub fn from_slice(i: &[u8]) -> WhisperResult<Frame> {
         match parse_frame(i) {
             IResult::Done(_, frame) => Ok(frame),
-            IResult::Incomplete(_) => Err(LlsdError::IncompleteFrame),
-            IResult::Error(_) => Err(LlsdError::BadFrame),
+            IResult::Incomplete(_) => Err(WhisperError::IncompleteFrame),
+            IResult::Error(_) => Err(WhisperError::BadFrame),
         }
     }
-    */
+}
+
+named!(parse_frame < &[u8], Frame >,
+       do_parse!(
+           pk:          map_opt!(take!(32), PublicKey::from_slice)  >>
+           nonce:       map_opt!(take!(24), Nonce::from_slice)      >>
+           kind:        map_opt!(take!(1),  FrameKind::from_slice)  >>
+           payload:     rest                                        >>
+           ({
+               let mut vec = Vec::with_capacity(payload.len());
+               vec.extend(payload.iter().cloned());
+               Frame {
+                   id: pk,
+                   nonce: nonce,
+                   kind: kind,
+                   payload: vec.into()
+               }
+           })
+           )
+      );
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use errors::WhisperError;
+    use sodiumoxide::crypto::box_::{gen_keypair, gen_nonce};
+
+    #[test]
+    fn pack_and_unpack() {
+        let frame = make_frame();
+        let packed_frame = frame.pack();
+        assert_eq!(packed_frame.len(), 60);
+
+        let parsed_frame = Frame::from_slice(&packed_frame);
+
+        assert_eq!(frame, parsed_frame.unwrap());
+    }
+    #[test]
+    fn frame_kind_from_slice() {
+        let hello = FrameKind::from_slice(&[1]).unwrap();
+        let welcome = FrameKind::from_slice(&[2]).unwrap();
+        let initiate = FrameKind::from_slice(&[3]).unwrap();
+        let ready = FrameKind::from_slice(&[4]).unwrap();
+        let request = FrameKind::from_slice(&[5]).unwrap();
+        let response = FrameKind::from_slice(&[6]).unwrap();
+        let notification = FrameKind::from_slice(&[7]).unwrap();
+        let termination = FrameKind::from_slice(&[255]).unwrap();
+        let bad = FrameKind::from_slice(&[100]);
+        let none = FrameKind::from_slice(&[]);
+
+        assert_eq!(hello, FrameKind::Hello);
+        assert_eq!(welcome, FrameKind::Welcome);
+        assert_eq!(initiate, FrameKind::Initiate);
+        assert_eq!(ready, FrameKind::Ready);
+        assert_eq!(request, FrameKind::Request);
+        assert_eq!(response, FrameKind::Response);
+        assert_eq!(notification, FrameKind::Notification);
+        assert_eq!(termination, FrameKind::Termination);
+        assert!(bad.is_none());
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn malformed_frame() {
+        let packed_frame = vec![1 as u8, 2, 3];
+
+        let parsed_frame = Frame::from_slice(&packed_frame);
+
+        assert_eq!(parsed_frame.is_err(), true);
+        let err = parsed_frame.err().unwrap();
+        match err {
+            WhisperError::IncompleteFrame => assert!(true),
+            _ => panic!("WRONG ERROR KIND"),
+        }
+    }
+
+    fn make_frame() -> Frame {
+        let (pk, _) = gen_keypair();
+        let payload = vec![0, 0, 0];
+        let nonce = gen_nonce();
+
+        Frame {
+            id: pk,
+            nonce: nonce,
+            kind: FrameKind::Hello,
+            payload: payload.into(),
+        }
+    }
 }
