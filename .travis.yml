@@ -19,8 +19,7 @@ addons:
       - binutils-dev
       - libiberty-dev
       - zlib1g-dev
-      - libbfd-dev
-      
+
     sources:
       - sourceline: ppa:chris-lea/libsodium
       - kalakris-cmake
