@@ -17,6 +17,7 @@ addons:
       - cmake
       - gcc
       - zlib1g-dev
+      - libbfd-dev
     sources:
       - sourceline: ppa:chris-lea/libsodium
       - kalakris-cmake
