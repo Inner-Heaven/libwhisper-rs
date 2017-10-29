@@ -22,11 +22,11 @@
 
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
-use sodiumoxide::crypto::box_::{Nonce, PublicKey, SecretKey};
-use sodiumoxide::crypto::box_;
-use std::rc::Rc;
 
 use errors::WhisperResult;
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::box_::{Nonce, PublicKey, SecretKey};
+use std::rc::Rc;
 
 /// Array of null bytes used in Hello package. Needs to be bigger than Welcome
 /// frame to prevent amplification attacks. Maybe, 256 is too much...who knows?
@@ -78,7 +78,7 @@ pub struct ServerSession {
     local_identity_keypair: Rc<KeyPair>,
     remote_session_key: PublicKey,
     remote_identity_key: Option<PublicKey>,
-    state: SessionState
+    state: SessionState,
 }
 impl ServerSession {
     fn new(local_identity_keypair: Rc<KeyPair>,
@@ -92,7 +92,7 @@ impl ServerSession {
             local_identity_keypair: Rc::clone(&local_identity_keypair),
             remote_session_key: remote_session_key,
             remote_identity_key: None,
-            state: SessionState::Fresh
+            state: SessionState::Fresh,
         };
         Ok(s)
     }
@@ -107,7 +107,7 @@ pub struct ClientSession {
     local_identity_keypair: Rc<KeyPair>,
     remote_session_key: Option<PublicKey>,
     remote_identity_key: PublicKey,
-    state: SessionState
+    state: SessionState,
 }
 impl ClientSession {
     /// Create new session. This method is private because it will create
@@ -124,7 +124,7 @@ impl ClientSession {
             local_identity_keypair: Rc::clone(&local_identity_keypair),
             remote_session_key: None,
             remote_identity_key: remote_identity_key,
-            state: SessionState::Fresh
+            state: SessionState::Fresh,
         };
         Ok(s)
     }

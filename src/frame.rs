@@ -1,11 +1,11 @@
 //! This is how frames look on the wire. This module doesn't handle Frame
 //! generation — generation is done in session module.
 
-use nom::{IResult, rest};
 use bytes::{BufMut, Bytes, BytesMut};
-use sodiumoxide::crypto::box_::{Nonce, PublicKey};
 
 use errors::{WhisperError, WhisperResult};
+use nom::{IResult, rest};
+use sodiumoxide::crypto::box_::{Nonce, PublicKey};
 
 
 /// How many bytes of overhead each frame has. Header consist of:
@@ -80,7 +80,7 @@ pub struct Frame {
     /// Message type as u8 BigEndian. 1 byte
     pub kind: FrameKind,
     /// Payload (that may or may not be encrypted)
-    pub payload: Bytes
+    pub payload: Bytes,
 }
 
 
