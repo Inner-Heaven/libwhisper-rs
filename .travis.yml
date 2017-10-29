@@ -1,0 +1,61 @@
+language: rust
+rust:
+  - nightly
+os:
+  - linux
+cache:
+  cargo: true
+addons:
+  apt:
+    packages:
+      - libsodium-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev
+      - libcurl4-openssl-dev
+      - cmake
+      - gcc
+      - zlib1g-dev
+    sources:
+      - sourceline: ppa:chris-lea/libsodium
+      - kalakris-cmake
+# Add clippy
+#before_script:
+#  - |
+#      if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
+#        ( ( cargo install clippy && export CLIPPY=true ) || export CLIPPY=false );
+#      fi
+#  - export PATH=$PATH:~/.cargo/bin
+# the main build
+script:
+  - |
+      if [[ "$TRAVIS_RUST_VERSION" == "nightly" && $CLIPPY ]]; then
+        cargo clippy
+      fi
+  - |
+      cargo build &&
+      cargo test
+after_success:
+# measure code coverage and upload to coveralls.io
+  - | 
+      if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
+          wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+          tar xzf master.tar.gz &&
+          cd kcov-master &&
+          mkdir build &&
+          cd build &&
+          cmake .. &&
+          make &&
+          sudo make install &&
+          cd ../.. &&
+          rm -rf kcov-master &&
+          rm -rf target/debug/* &&
+          cargo test --no-run -- -Zprofile -Zno-landing-pads -Cpasses=insert-gcov-profiling --Clink-dead-code &&
+          #for file in target/debug/angel_whisper-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/lib" "$file"; done ;
+          #for file in target/debug/angel_system_bare-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/bare" "$file"; done ;
+          #for file in target/debug/system_on_tokio-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/tokio" "$file"; done ;
+          #kcov --merge /tmp/kcov --coveralls-id=$TRAVIS_JOB_ID target/cov/lib target/cov/tokio target/cov/bare
+          bash <(curl -s https://codecov.io/bash)
+          rm -rf target/debug/*
+          echo "Uploaded code coverage"
+      fi
