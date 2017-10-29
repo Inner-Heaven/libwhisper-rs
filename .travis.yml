@@ -5,9 +5,6 @@ os:
   - linux
 cache:
   cargo: true
-env:
-  global:
-  - RUSTFLAGS="-C link-dead-code"
 addons:
   apt:
     packages:
