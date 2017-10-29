@@ -1,5 +1,3 @@
-#![deny(missing_docs)]
-
 //! This module handles Session (singular) management. The session is
 //! responsible for Frame generation and encryption.
 //!
@@ -24,19 +22,19 @@
 
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
-use rand::thread_rng;
-use secp256k1::Secp256k1;
-use secp256k1::key::{PublicKey, SecretKey};
+use sodiumoxide::crypto::box_::{Nonce, PublicKey, SecretKey};
+use sodiumoxide::crypto::box_;
 use std::rc::Rc;
 
+use errors::WhisperResult;
+
 /// Array of null bytes used in Hello package. Needs to be bigger than Welcome
-/// frame to prevent amplification attacks. Maybe, 256 is too much, subject to
-/// change.
+/// frame to prevent amplification attacks. Maybe, 256 is too much...who knows?
 pub static NULL_BYTES: [u8; 256] = [b'\x00'; 256];
 /// Payload "server" side supposed to send to client when.
 pub static READY_PAYLOAD: &'static [u8; 16] = b"My body is ready";
 
-/// Secp256k1 keypair. This is just a helper type.
+/// A keypair. This is just a helper type.
 #[derive(Debug, Clone)]
 pub struct KeyPair {
     /// Public key.
@@ -45,13 +43,10 @@ pub struct KeyPair {
     pub secret_key: SecretKey,
 }
 impl KeyPair {
-    /// Generate new keypair using thread-local random number generator. This
-    /// function does unwrapping because the only reason for this to fail is to
-    /// pass ctx without singing flag.
+    /// Generate new keypair using libsodium.
     #[inline]
-    pub fn new(ctx: &Secp256k1) -> KeyPair {
-        let (secret_key, public_key) = ctx.generate_keypair(&mut thread_rng())
-            .expect("Failed to generate keypair");
+    pub fn new() -> KeyPair {
+        let (public_key, secret_key) = box_::gen_keypair();
         KeyPair {
             secret_key: secret_key,
             public_key: public_key,
@@ -83,25 +78,23 @@ pub struct ServerSession {
     local_identity_keypair: Rc<KeyPair>,
     remote_session_key: PublicKey,
     remote_identity_key: Option<PublicKey>,
-    state: SessionState,
-    ctx: Secp256k1,
+    state: SessionState
 }
 impl ServerSession {
     fn new(local_identity_keypair: Rc<KeyPair>,
-           remote_session_key: PublicKey,
-           ctx: Secp256k1)
-           -> ServerSession {
+           remote_session_key: PublicKey)
+           -> WhisperResult<ServerSession> {
         let now = Utc::now();
-        ServerSession {
+        let s = ServerSession {
             expire_at: now + Duration::minutes(34),
             created_at: now,
-            local_session_keypair: KeyPair::new(&ctx),
+            local_session_keypair: KeyPair::new(),
             local_identity_keypair: Rc::clone(&local_identity_keypair),
             remote_session_key: remote_session_key,
             remote_identity_key: None,
-            state: SessionState::Fresh,
-            ctx: ctx,
-        }
+            state: SessionState::Fresh
+        };
+        Ok(s)
     }
 }
 
@@ -114,28 +107,26 @@ pub struct ClientSession {
     local_identity_keypair: Rc<KeyPair>,
     remote_session_key: Option<PublicKey>,
     remote_identity_key: PublicKey,
-    state: SessionState,
-    ctx: Secp256k1,
+    state: SessionState
 }
 impl ClientSession {
     /// Create new session. This method is private because it will create
     /// session with a few missing values.
     #[inline]
     fn new(local_identity_keypair: Rc<KeyPair>,
-           remote_identity_key: PublicKey,
-           ctx: Secp256k1)
-           -> ClientSession {
+           remote_identity_key: PublicKey)
+           -> WhisperResult<ClientSession> {
         let now = Utc::now();
-        ClientSession {
+        let s = ClientSession {
             expire_at: now + Duration::minutes(34),
             created_at: now,
-            local_session_keypair: KeyPair::new(&ctx),
+            local_session_keypair: KeyPair::new(),
             local_identity_keypair: Rc::clone(&local_identity_keypair),
             remote_session_key: None,
             remote_identity_key: remote_identity_key,
-            state: SessionState::Fresh,
-            ctx: ctx,
-        }
+            state: SessionState::Fresh
+        };
+        Ok(s)
     }
 }
 

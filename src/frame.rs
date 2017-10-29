@@ -2,8 +2,7 @@
 //! generation — generation is done in session module.
 
 use bytes::{BufMut, Bytes, BytesMut};
-use secp256k1::key::PublicKey;
-use sodiumoxide::crypto::box_::Nonce;
+use sodiumoxide::crypto::box_::{Nonce, PublicKey};
 
 /// How many bytes of overhead each frame has.
 pub static HEADER_SIZE: usize = 57;
@@ -74,7 +73,7 @@ pub struct Frame {
     /// Message type as u8 BigEndian. 1 byte
     pub kind: FrameKind,
     /// Payload (that may or may not be encrypted)
-    pub payload: Bytes,
+    pub payload: Bytes
 }
 
 
