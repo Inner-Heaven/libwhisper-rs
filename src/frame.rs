@@ -187,10 +187,13 @@ mod test {
 
         assert_eq!(parsed_frame.is_err(), true);
         let err = parsed_frame.err().unwrap();
-        match err {
-            WhisperError::IncompleteFrame => assert!(true),
-            _ => panic!("WRONG ERROR KIND"),
+
+        // nasty
+        let mut is_incomplete = false;
+        if let WhisperError::IncompleteFrame = err {
+            is_incomplete = true;
         }
+        assert!(is_incomplete);
     }
 
     fn make_frame() -> Frame {
