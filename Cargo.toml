@@ -2,6 +2,17 @@
 authors = ["Andrey Cherkashin <with.out@me.com>"]
 name = "libwhisper"
 version = "0.1.0"
+license = "BSD-2-Clause"
+description = "Rust implementation of Angel Whisper Wire Protocol"
+repository = "https://github.com/Inner-Heaven/libwhisper-rs"
+keywords = ["protocol", "network", "cryptography", "communication"]
+categories = ["network-programming"]
+readme = "README.md"
+
+[badges]
+travis-ci = { repository = "Inner-Heaven/libwhisper-rs" }
+codecov = { repository = "Inner-Heaven/libwhisper-rs" }
+maintenance = { status = "experimental" }
 
 [dependencies]
 byteorder = "1.0.0"
