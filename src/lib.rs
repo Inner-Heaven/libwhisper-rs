@@ -68,7 +68,6 @@ extern crate quick_error;
 #[macro_use]
 extern crate nom;
 
-
 pub mod session;
 pub mod frame;
 pub mod errors;

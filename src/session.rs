@@ -180,7 +180,7 @@ impl ServerSession {
                       initiate: &Frame,
                       client_identity_key: &PublicKey)
                       -> WhisperResult<(EstablishedSession, Frame)> {
-        if self.state != SessionState::Fresh || initiate.kind != FrameKind::Initiate {
+        if self.state != SessionState::Initiated || initiate.kind != FrameKind::Initiate {
             return Err(WhisperError::InvalidSessionState);
         }
 
@@ -354,12 +354,42 @@ impl EstablishedSession {
         (nonce, payload.into())
     }
 
-    fn read_msg(&self, frame: &Frame) -> WhisperResult<Bytes> {
+    /// Method use to open payload.
+    pub fn read_msg(&self, frame: &Frame) -> WhisperResult<Bytes> {
         if let Ok(msg) = box_::open_precomputed(&frame.payload, &frame.nonce, &self.session_secret) {
             Ok(msg.into())
         } else {
             Err(WhisperError::DecryptionFailed)
         }
+    }
+
+    fn make_message(&self, data: &[u8], kind: FrameKind) -> WhisperResult<Frame> {
+        if self.is_expired() {
+            return Err(WhisperError::ExpiredSession);
+        }
+        let (nonce, payload) = self.seal_msg(data);
+        let frame = Frame {
+            id: self.id(),
+            nonce: nonce,
+            kind: kind,
+            payload: payload,
+        };
+        Ok(frame)
+    }
+
+    /// Method used to create new requests.
+    pub fn make_request(&self, data: &[u8]) -> WhisperResult<Frame> {
+        self.make_message(data, FrameKind::Request)
+    }
+
+    /// Method used to create new responses.
+    pub fn make_response(&self, data: &[u8]) -> WhisperResult<Frame> {
+        self.make_message(data, FrameKind::Response)
+    }
+
+    /// Method used to create new notifications.
+    pub fn make_notification(&self, data: &[u8]) -> WhisperResult<Frame> {
+        self.make_message(data, FrameKind::Notification)
     }
 }
 
@@ -374,19 +404,137 @@ trait Session {
 }
 
 impl Session for ClientSession {
-    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn is_expired(&self) -> bool { self.expire_at < Utc::now() }
     fn session_state(&self) -> SessionState { self.state }
     fn id(&self) -> PublicKey { self.local_session_keypair.public_key }
 }
 
 impl Session for ServerSession {
-    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn is_expired(&self) -> bool { self.expire_at < Utc::now() }
     fn session_state(&self) -> SessionState { self.state }
     fn id(&self) -> PublicKey { self.remote_session_key }
 }
 
 impl Session for EstablishedSession {
-    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn is_expired(&self) -> bool { self.expire_at < Utc::now() }
     fn session_state(&self) -> SessionState { SessionState::Ready }
     fn id(&self) -> PublicKey { self.id }
+}
+
+#[cfg(test)]
+mod test {
+    use frame::FrameKind;
+    use session::{ClientSession, EstablishedSession, KeyPair, ServerSession, Session, SessionState};
+
+    /// Helper to create two established sessions.
+    fn handshake() -> (EstablishedSession, EstablishedSession) {
+        let client_identity_keypair = KeyPair::new();
+        let server_identity_keypair = KeyPair::new();
+        let mut client_session =
+            ClientSession::new(&client_identity_keypair,
+                               &server_identity_keypair.public_key);
+        let mut server_session = ServerSession::new(&server_identity_keypair, &client_session.id());
+        let hello_frame = client_session.make_hello();
+        let welcome_frame =
+            server_session.make_welcome(&hello_frame)
+                          .expect("Failed to create welcome!");
+        let initiate_frame =
+            client_session.make_initiate(&welcome_frame)
+                          .expect("Failed to create initiate!");
+        let client_identity_key =
+            server_session.validate_initiate(&initiate_frame)
+                          .expect("Failed to unpack PublicKey");
+        let (server_established_session, ready_frame) =
+            server_session.make_ready(&initiate_frame, &client_identity_key)
+                          .expect("Failed to create ready!");
+        let client_established_session =
+            client_session.read_ready(&ready_frame)
+                          .expect("Failed to read ready frame!");
+        (client_established_session, server_established_session)
+    }
+
+    #[test]
+    fn test_expire_client() {
+        let local = KeyPair::new();
+        let remote = KeyPair::new();
+
+        let client_session = ClientSession::new(&local, &remote.public_key);
+        assert!(!client_session.is_expired());
+    }
+
+    #[test]
+    fn test_expire_server() {
+        let local = KeyPair::new();
+        let remote = KeyPair::new();
+
+        let server_session = ServerSession::new(&local, &remote.public_key);
+        assert!(!server_session.is_expired());
+    }
+
+    #[test]
+    fn test_successful_hashshake() {
+        let client_identity_keypair = KeyPair::new();
+        let server_identity_keypair = KeyPair::new();
+
+        let mut client_session =
+            ClientSession::new(&client_identity_keypair,
+                               &server_identity_keypair.public_key);
+        let mut server_session = ServerSession::new(&server_identity_keypair, &client_session.id());
+        assert_eq!(client_session.state, SessionState::Fresh);
+        assert_eq!(server_session.state, SessionState::Fresh);
+        assert_eq!(client_session.id(), server_session.id());
+
+        let hello_frame = client_session.make_hello();
+        assert_eq!(hello_frame.kind, FrameKind::Hello);
+        assert_eq!(client_session.state, SessionState::Initiated);
+
+        let welcome_frame =
+            server_session.make_welcome(&hello_frame)
+                          .expect("Failed to create welcome!");
+        assert_eq!(server_session.state, SessionState::Initiated);
+
+        let initiate_frame =
+            client_session.make_initiate(&welcome_frame)
+                          .expect("Failed to create initiate!");
+
+        let client_identity_key =
+            server_session.validate_initiate(&initiate_frame)
+                          .expect("Failed to unpack PublicKey");
+        assert_eq!(&client_identity_key, &client_identity_keypair.public_key);
+
+        let (server_established_session, ready_frame) =
+            server_session.make_ready(&initiate_frame, &client_identity_key)
+                          .expect("Failed to create ready!");
+        assert_eq!(server_established_session.session_state(),
+                   SessionState::Ready);
+        assert_eq!(server_session.session_state(), SessionState::Ready);
+
+        let client_established_session =
+            client_session.read_ready(&ready_frame)
+                          .expect("Failed to read ready frame!");
+        assert_eq!(client_established_session.session_state(),
+                   SessionState::Ready);
+        assert_eq!(client_session.session_state(), SessionState::Ready);
+    }
+
+    #[test]
+    fn test_ping_pong() {
+        let (client, server) = handshake();
+
+        let ping_bytes = b"ping";
+        let ping = client.make_request(ping_bytes).unwrap();
+        assert_eq!(ping.kind, FrameKind::Request);
+        let ping_payload = server.read_msg(&ping).unwrap();
+        assert_eq!(&ping_payload.as_ref(), &ping_bytes);
+
+        let pong_bytes = b"pong";
+        let pong = server.make_response(pong_bytes).unwrap();
+        assert_eq!(pong.kind, FrameKind::Response);
+        let pong_payload = client.read_msg(&pong).unwrap();
+        assert_eq!(&pong_payload.as_ref(), &pong_bytes);
+
+        let score = server.make_notification(b"Player B Scored").unwrap();
+
+        assert_eq!(score.kind, FrameKind::Notification);
+    }
 }
