@@ -169,7 +169,7 @@ impl Session for ServerSession {
         self.state
     }
     fn id(&self) -> PublicKey {
-        self.remote_session_keypair.public_key
+        self.remote_session_key
     }
 }
 
