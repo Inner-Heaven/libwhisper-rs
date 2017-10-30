@@ -43,35 +43,21 @@
 //!
 //! #### Is it secure?
 //!
-//! Maybe, maybe not. I'm not a cryptographer, this is just for the lulz. Maybe
-//! can someone help with that?
+//! Maybe, maybe not. I'm not a cryptographer. However, this protocol is based
+//! on CurveZMQ. I didn't write my own implementation of cryptographic
+//! primitives. This library relies on `libsodium`.
 //!
 //! ##### Why does it use secp256k1 at the beginning instead of Curve25519?
 //!
 //! Because I had a dream where I built ethereum wallet with p2p direct
 //! messaging. Therefore, I ended up using secp256k1 public keys for identity.
 //! First attempt was using Curve25519. After some discussions, I've decided to
-//! switch back to Curve25519. Honestly, I don't like the way rust binding to
-//! `libsecp256k1`work.
+//! switch back to Curve25519.
 //!
 //! #### What other languages it supports?
 //!
 //! Right now — only rust. In a very close feature — C via rust library. Next
 //! step is Ruby via c library. After that pure Kotlin implementation.
-//!
-//! #### Why Rust? You barely even know rust!
-//!
-//! Well... I wanted to learn rust by writing something interesting in it.
-//! Something that involves using many features of rust.
-//!
-//! #### Why not helix?
-//!
-//! Seems like a wrong tool for this job. Fight me.
-//!
-//! #### Why Kotlin and not Java?
-//!
-//! Because I like Kotlin more than Java. I had enough experience with Java to
-//! be interested in Kotlin.
 
 
 extern crate chrono;

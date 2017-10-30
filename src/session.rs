@@ -20,10 +20,12 @@
 //! The protocol allows bi-directorial message exchange. However,
 //! implementation of that is not part of the protocol.
 
+use bytes::Bytes;
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
+use errors::{WhisperError, WhisperResult};
 
-use errors::WhisperResult;
+use frame::{Frame, FrameKind};
 use sodiumoxide::crypto::box_;
 use sodiumoxide::crypto::box_::{Nonce, PrecomputedKey, PublicKey, SecretKey};
 
@@ -35,8 +37,7 @@ pub static READY_PAYLOAD: &'static [u8; 16] = b"My body is ready";
 
 /// How much time client and server have to agree on shared secret.
 pub static HANDSHAKE_DURATION: i64 = 3;
-/// How much time one shared secret can last. In case you're wondering those
-/// are Fibonacci numbers.
+/// How much time one shared secret can last.
 pub static SESSION_DURATION: i64 = 55;
 
 /// A keypair. This is just a helper type.
@@ -86,7 +87,8 @@ pub struct ServerSession {
     state: SessionState,
 }
 impl ServerSession {
-    fn new(local_identity_keypair: &KeyPair, remote_session_key: &PublicKey) -> ServerSession {
+    /// Server side session.
+    pub fn new(local_identity_keypair: &KeyPair, remote_session_key: &PublicKey) -> ServerSession {
         let now = Utc::now();
         ServerSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
@@ -98,6 +100,108 @@ impl ServerSession {
             remote_identity_key: None,
             state: SessionState::Fresh,
         }
+    }
+    /// Helper to make a Welcome frame, a reply to Hello frame. Server worflow.
+    pub fn make_welcome(&mut self, hello: &Frame) -> WhisperResult<Frame> {
+        if self.state != SessionState::Fresh || hello.kind != FrameKind::Hello {
+            return Err(WhisperError::InvalidSessionState);
+        }
+        // Verify content of the box
+        if let Ok(payload) = box_::open(&hello.payload,
+                                     &hello.nonce,
+                                     &hello.id,
+                                     &self.local_identity_keypair.secret_key)
+        {
+            // We're not going to verify that box content itself, but will verify it's
+            // length since
+            // that is what matters the most.
+            if payload.len() != 256 {
+                self.state = SessionState::Error;
+                return Err(WhisperError::InvalidHelloFrame);
+            }
+
+            self.state = SessionState::Initiated;
+
+            let nonce = box_::gen_nonce();
+            let welcome_box = box_::seal(self.local_session_keypair.public_key.as_ref(),
+                                         &nonce,
+                                         &hello.id,
+                                         &self.local_identity_keypair.secret_key);
+
+            let welcome_frame = Frame {
+                // Server uses client id in reply.
+                id: hello.id,
+                nonce: nonce,
+                kind: FrameKind::Welcome,
+                payload: welcome_box.into(),
+            };
+            Ok(welcome_frame)
+        } else {
+            self.state = SessionState::Error;
+            Err(WhisperError::DecryptionFailed)
+        }
+    }
+    /// A helper to extract client's permamanet public key from initiate frame
+    /// in order to
+    /// authenticate client. Authentication happens in another place.
+    pub fn validate_initiate(&self, initiate: &Frame) -> WhisperResult<PublicKey> {
+        if let Ok(initiate_payload) =
+            box_::open(&initiate.payload,
+                       &initiate.nonce,
+                       &self.remote_session_key,
+                       &self.local_session_keypair.secret_key)
+        {
+            // TODO: change to != with proper size
+            if initiate_payload.len() < 60 {
+                return Err(WhisperError::InvalidInitiateFrame);
+            }
+            // unwrapping here because they only panic when input is shorter than needed.
+            let pk = PublicKey::from_slice(&initiate_payload[0..32])
+                .expect("Failed to slice pk from payload");
+            let v_nonce = Nonce::from_slice(&initiate_payload[32..56])
+                .expect("Failed to slice nonce from payload");
+            let v_box = &initiate_payload[56..initiate_payload.len()];
+
+            if let Ok(vouch_payload) =
+                box_::open(v_box, &v_nonce, &pk, &self.local_session_keypair.secret_key)
+            {
+                let v_pk = PublicKey::from_slice(&vouch_payload).expect("Wrong Size Key!!!");
+                if vouch_payload.len() == 32 || v_pk == self.remote_session_key {
+                    return Ok(pk);
+                }
+            }
+        }
+        Err(WhisperError::InvalidInitiateFrame)
+    }
+
+    /// Helper to make a Ready frame, a reply to Initiate frame. Server
+    /// workflow.
+    pub fn make_ready(&mut self,
+                      initiate: &Frame,
+                      client_identity_key: &PublicKey)
+                      -> WhisperResult<(EstablishedSession, Frame)> {
+        if self.state != SessionState::Fresh || initiate.kind != FrameKind::Initiate {
+            return Err(WhisperError::InvalidSessionState);
+        }
+
+        // If client spend more than 3 minutes to come up with initiate - fuck him.
+        let duration_since = Utc::now().signed_duration_since(self.created_at);
+        if duration_since > Duration::minutes(HANDSHAKE_DURATION) {
+            return Err(WhisperError::ExpiredSession);
+        }
+        self.state = SessionState::Ready;
+        self.remote_identity_key = Some(*client_identity_key);
+
+        let session = EstablishedSession::new(&self.remote_session_key,
+                                              &self.local_session_keypair);
+        let (nonce, payload) = session.seal_msg(READY_PAYLOAD);
+        let frame = Frame {
+            id: initiate.id,
+            nonce: nonce,
+            kind: FrameKind::Ready,
+            payload: payload,
+        };
+        Ok((session, frame))
     }
 }
 
@@ -115,8 +219,7 @@ pub struct ClientSession {
 impl ClientSession {
     /// Create new session. This method is private because it will create
     /// session with a few missing values.
-    #[inline]
-    fn new(local_identity_keypair: &KeyPair, remote_identity_key: &PublicKey) -> ClientSession {
+    pub fn new(local_identity_keypair: &KeyPair, remote_identity_key: &PublicKey) -> ClientSession {
         let now = Utc::now();
         ClientSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
@@ -129,36 +232,94 @@ impl ClientSession {
             state: SessionState::Fresh,
         }
     }
+    /// Helper to make Hello frame. Client workflow.
+    pub fn make_hello(&mut self) -> Frame {
+        self.state = SessionState::Initiated;
+        let nonce = box_::gen_nonce();
+        let payload = box_::seal(&NULL_BYTES,
+                                 &nonce,
+                                 &self.remote_identity_key,
+                                 &self.local_session_keypair.secret_key);
+        Frame {
+            id: self.local_session_keypair.public_key,
+            nonce: nonce,
+            kind: FrameKind::Hello,
+            payload: payload.into(),
+        }
+    }
+
+    /// Helper to make am Initiate frame, a reply to Welcome frame. Client
+    /// workflow.
+    pub fn make_initiate(&mut self, welcome: &Frame) -> WhisperResult<Frame> {
+        if self.state != SessionState::Initiated || welcome.kind != FrameKind::Welcome {
+            return Err(WhisperError::InvalidSessionState);
+        }
+        // Try to obtain server short public key from the box.
+        if let Ok(server_pk) = box_::open(&welcome.payload,
+                                       &welcome.nonce,
+                                       &self.remote_identity_key,
+                                       &self.local_session_keypair.secret_key)
+        {
+            if let Some(key) = PublicKey::from_slice(&server_pk) {
+                self.remote_session_key = Some(key);
+                let mut initiate_box = Vec::with_capacity(104);
+                initiate_box.extend_from_slice(&self.local_identity_keypair.public_key.0);
+                initiate_box.extend(self.make_vouch());
+                let nonce = box_::gen_nonce();
+                let payload = box_::seal(&initiate_box,
+                                         &nonce,
+                                         &self.remote_session_key.expect("Shit is on fire yo"),
+                                         &self.local_session_keypair.secret_key);
+                let frame = Frame {
+                    id: welcome.id,
+                    nonce: nonce,
+                    kind: FrameKind::Initiate,
+                    payload: payload.into(),
+                };
+                Ok(frame)
+            } else {
+                self.state = SessionState::Error;
+
+                return Err(WhisperError::InvalidWelcomeFrame);
+            }
+        } else {
+            self.state = SessionState::Error;
+            return Err(WhisperError::DecryptionFailed);
+        }
+    }
+    /// Verify that reply to initiate frame is correct ready frame. Changes
+    /// session state if so.
+    pub fn read_ready(&mut self, ready: &Frame) -> WhisperResult<EstablishedSession> {
+        if self.state != SessionState::Initiated || ready.kind != FrameKind::Ready {
+            return Err(WhisperError::InvalidSessionState);
+        }
+        // This can never fail when used properly.
+        let session = EstablishedSession::new(&self.remote_session_key.unwrap(),
+                                              &self.local_session_keypair);
+        let msg = session.read_msg(ready)?;
+        if msg.as_ref() == READY_PAYLOAD {
+            self.state = SessionState::Ready;
+            Ok(session)
+        } else {
+            Err(WhisperError::InvalidReadyFrame)
+        }
+    }
+    // Helper to make a vouch
+    fn make_vouch(&self) -> Vec<u8> {
+        let nonce = box_::gen_nonce();
+        let our_sk = &self.local_identity_keypair.secret_key;
+        let pk = &self.local_session_keypair.public_key;
+        let vouch_box = box_::seal(&pk.0,
+                                   &nonce,
+                                   &self.remote_session_key.expect("Shit is on fire yo"),
+                                   our_sk);
+
+        let mut vouch = Vec::with_capacity(72);
+        vouch.extend_from_slice(&nonce.0);
+        vouch.extend(vouch_box);
+        vouch
+    }
 }
-
-/// Common session functions that apply to all session types.
-trait Session {
-    /// Returns true if session is expired.
-    fn is_expired(&self) -> bool;
-    /// Returns local long term public key.
-    fn local_identity(&self) -> PublicKey;
-    /// Returns session state.
-    fn session_state(&self) -> SessionState;
-    /// Returns session id. This should always be client short term public key.
-    fn id(&self) -> PublicKey;
-}
-
-impl Session for ClientSession {
-    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
-    fn local_identity(&self) -> PublicKey { self.local_identity_keypair.public_key }
-
-    fn session_state(&self) -> SessionState { self.state }
-    fn id(&self) -> PublicKey { self.local_session_keypair.public_key }
-}
-
-impl Session for ServerSession {
-    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
-    fn local_identity(&self) -> PublicKey { self.local_identity_keypair.public_key }
-
-    fn session_state(&self) -> SessionState { self.state }
-    fn id(&self) -> PublicKey { self.remote_session_key }
-}
-
 
 /// This structure represent session that completed handshake.
 ///
@@ -167,9 +328,65 @@ impl Session for ServerSession {
 /// ServerSession turns into EstablishedSession by verifying Initiate frame.
 /// ClientSession turns into EstablishedSession by verifying Ready frame.
 pub struct EstablishedSession {
+    id: PublicKey,
     expire_at: DateTime<Utc>,
-    established_at: DateTime<Utc>,
-    local_intentity_key: PublicKey,
-    remote_identity_key: PublicKey,
-    session_key: PrecomputedKey,
+    session_secret: PrecomputedKey,
+}
+
+impl EstablishedSession {
+    /// Create EstablishSession by precomputing shared secret. Don't use this
+    /// directly.
+    pub fn new(remote_session_key: &PublicKey,
+               local_session_keypair: &KeyPair)
+               -> EstablishedSession {
+        let now = Utc::now();
+        let our_precomputed_key = box_::precompute(&remote_session_key,
+                                                   &local_session_keypair.secret_key);
+        EstablishedSession {
+            id: local_session_keypair.public_key,
+            expire_at: now + Duration::minutes(SESSION_DURATION),
+            session_secret: our_precomputed_key,
+        }
+    }
+    fn seal_msg(&self, data: &[u8]) -> (Nonce, Bytes) {
+        let nonce = box_::gen_nonce();
+        let payload = box_::seal_precomputed(data, &nonce, &self.session_secret);
+        (nonce, payload.into())
+    }
+
+    fn read_msg(&self, frame: &Frame) -> WhisperResult<Bytes> {
+        if let Ok(msg) = box_::open_precomputed(&frame.payload, &frame.nonce, &self.session_secret) {
+            Ok(msg.into())
+        } else {
+            Err(WhisperError::DecryptionFailed)
+        }
+    }
+}
+
+/// Common session functions that apply to all session types.
+trait Session {
+    /// Returns true if session is expired.
+    fn is_expired(&self) -> bool;
+    /// Returns session state.
+    fn session_state(&self) -> SessionState;
+    /// Returns session id. This should always be client short term public key.
+    fn id(&self) -> PublicKey;
+}
+
+impl Session for ClientSession {
+    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn session_state(&self) -> SessionState { self.state }
+    fn id(&self) -> PublicKey { self.local_session_keypair.public_key }
+}
+
+impl Session for ServerSession {
+    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn session_state(&self) -> SessionState { self.state }
+    fn id(&self) -> PublicKey { self.remote_session_key }
+}
+
+impl Session for EstablishedSession {
+    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn session_state(&self) -> SessionState { SessionState::Ready }
+    fn id(&self) -> PublicKey { self.id }
 }
