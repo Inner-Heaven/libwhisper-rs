@@ -1,7 +1,5 @@
 # Changelog
 
-## key
-
 Changelog entries are classified using the following labels _(from [keep-a-changelog][]_):
 
 - `added`: for new features
@@ -10,22 +8,9 @@ Changelog entries are classified using the following labels _(from [keep-a-chang
 - `removed`: for deprecated features removed in this release
 - `fixed`: for any bug fixes
 
-## Unreleased
+## [0.1.0] - 2017-10-30
 
-This is an example section. Update this with actual history.
+The initial version that was available to `crates.io`.
 
-### Changed
-
-- Description of something that was changed.
-
-### Added
-
-- Description of something that was added.
-
-## [0.1.0] - 2017-10-26
-
-First commit.
-
-[Unreleased]: https://github.com/Inner-Heaven/libwhisper-rs/compare/0.1.0...HEAD
 [keep-a-changelog]: https://github.com/olivierlacan/keep-a-changelog
 
