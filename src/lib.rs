@@ -1,8 +1,9 @@
 #![deny(missing_docs)]
 
 //! # Angel Whisper
-//! [![Gitter](https://badges.gitter.im/Inner-Heaven/angel-whisper.svg)](https://gitter.im/Inner-Heaven/angel-whisper?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
-//!
+//! [![Gitter](https://badges.gitter.im/Inner-Heaven/angel-whisper.svg)](https://gitter.im/Inner-Heaven/whisper?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+//! [![Build Status](https://travis-ci.org/Inner-Heaven/libwhisper-rs.svg?branch=master)](https://travis-ci.org/Inner-Heaven/libwhisper-rs)
+//! [![codecov](https://codecov.io/gh/Inner-Heaven/libwhisper-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/Inner-Heaven/libwhisper-rs)
 //! The reference implementation of Angel Whisper Wire Protocol under
 //! development. As of today, this is the only documentation of protocol
 //! available. This is refactoring of [my first

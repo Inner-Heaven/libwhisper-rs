@@ -26,7 +26,7 @@ addons:
 notifications:
   webhooks:
     urls:
-      - https://webhooks.gitter.im/e/047c31225e476090980a
+      - https://webhooks.gitter.im/e/f5421b5c6bf3dbb16f4a
     on_success: always
     on_failure: always
     on_start: never
