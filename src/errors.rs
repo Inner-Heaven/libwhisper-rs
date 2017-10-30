@@ -26,7 +26,7 @@ quick_error! {
         InvalidInitiateFrame {}
         /// Not having enough bytes to decode frame.
         IncompleteFrame {}
-        /// Trying to use session before handshake is done or restarting handshake with the same keypair.
+        /// Either restarting a handshake or forgetting to do handshake at all.
         InvalidSessionState {}
         /// Enough bytes to decode, but bytes make no sense.
         BadFrame {}

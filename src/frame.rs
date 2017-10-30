@@ -86,19 +86,7 @@ pub struct Frame {
 
 impl Frame {
     /// Calculates length of a frame;
-    pub fn length(&self) -> usize {
-        HEADER_SIZE + self.payload.len()
-    }
-    
-    /// ignore this
-    pub fn pack_bad(&self) -> Bytes {
-        let mut buf = BytesMut::with_capacity(self.length());
-        buf.extend_from_slice(&self.id.0);
-        buf.extend_from_slice(&self.nonce.0);
-        buf.put_u8(13);
-        buf.extend_from_slice(&self.payload);
-        buf.freeze()
-    }
+    pub fn length(&self) -> usize { HEADER_SIZE + self.payload.len() }
 
     /// Writes packed bytes to supplied buffer. This doesn't include legnth of
     /// the message.

@@ -92,7 +92,8 @@ impl ServerSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
             created_at: now,
             local_session_keypair: KeyPair::new(),
-            local_identity_keypair: local_identity_keypair.clone(),
+            local_identity_keypair:
+                local_identity_keypair.clone(),
             remote_session_key: remote_session_key.clone(),
             remote_identity_key: None,
             state: SessionState::Fresh,
@@ -121,7 +122,8 @@ impl ClientSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
             created_at: now,
             local_session_keypair: KeyPair::new(),
-            local_identity_keypair: local_identity_keypair.clone(),
+            local_identity_keypair:
+                local_identity_keypair.clone(),
             remote_session_key: None,
             remote_identity_key: remote_identity_key.clone(),
             state: SessionState::Fresh,
@@ -142,35 +144,19 @@ trait Session {
 }
 
 impl Session for ClientSession {
-    fn is_expired(&self) -> bool {
-        self.expire_at > Utc::now()
-    }
-    fn local_identity(&self) -> PublicKey {
-        self.local_identity_keypair.public_key
-    }
+    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn local_identity(&self) -> PublicKey { self.local_identity_keypair.public_key }
 
-    fn session_state(&self) -> SessionState {
-        self.state
-    }
-    fn id(&self) -> PublicKey {
-        self.local_session_keypair.public_key
-    }
+    fn session_state(&self) -> SessionState { self.state }
+    fn id(&self) -> PublicKey { self.local_session_keypair.public_key }
 }
 
 impl Session for ServerSession {
-    fn is_expired(&self) -> bool {
-        self.expire_at > Utc::now()
-    }
-    fn local_identity(&self) -> PublicKey {
-        self.local_identity_keypair.public_key
-    }
+    fn is_expired(&self) -> bool { self.expire_at > Utc::now() }
+    fn local_identity(&self) -> PublicKey { self.local_identity_keypair.public_key }
 
-    fn session_state(&self) -> SessionState {
-        self.state
-    }
-    fn id(&self) -> PublicKey {
-        self.remote_session_key
-    }
+    fn session_state(&self) -> SessionState { self.state }
+    fn id(&self) -> PublicKey { self.remote_session_key }
 }
 
 
