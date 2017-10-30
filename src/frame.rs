@@ -89,6 +89,16 @@ impl Frame {
     pub fn length(&self) -> usize {
         HEADER_SIZE + self.payload.len()
     }
+    
+    /// ignore this
+    pub fn pack_bad(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(self.length());
+        buf.extend_from_slice(&self.id.0);
+        buf.extend_from_slice(&self.nonce.0);
+        buf.put_u8(13);
+        buf.extend_from_slice(&self.payload);
+        buf.freeze()
+    }
 
     /// Writes packed bytes to supplied buffer. This doesn't include legnth of
     /// the message.
@@ -98,7 +108,6 @@ impl Frame {
         buf.extend_from_slice(&self.nonce.0);
         buf.put_u8(self.kind as u8);
         buf.extend_from_slice(&self.payload);
-        ()
     }
 
     /// Pack frame header and its payload into Vec<u8>.
@@ -194,6 +203,22 @@ mod test {
             is_incomplete = true;
         }
         assert!(is_incomplete);
+    }
+
+    #[test]
+    fn bad_frame() {
+        // Frames created by this library will never be invalid, but oh well.
+        // I present you malformed frame — frame that has FrameType of 13.
+        let bad_frame = b"\x85\x0f\xc2?\xce\x80f\x16\xec8\x04\xc7{5\x98\xa7u<\xa5y\xda\x12\xfe\xad\xdc^%[\x8ap\xfa7q.-)\xe4V\xec\x94\xb2\x7f\r\x9a\x91\xc7\xcd\x08\xa4\xee\xbfbpH\x07%\r\0\0\0";
+        let result = Frame::from_slice(&bad_frame[0..59]);
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        // nasty
+        let mut is_bad = false;
+        if let WhisperError::BadFrame = err {
+            is_bad = true;
+        }
+        assert!(is_bad);
     }
 
     fn make_frame() -> Frame {
