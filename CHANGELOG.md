@@ -8,6 +8,13 @@ Changelog entries are classified using the following labels _(from [keep-a-chang
 - `removed`: for deprecated features removed in this release
 - `fixed`: for any bug fixes
 
+## [0.1.1] - 2017-11-02
+### Changed
+- Another readme cleanup
+- Session cosntructors (all 3 of them) signature. **BREAKING**
+### Added
+- crates.io badge
+
 ## [0.1.0] - 2017-10-30
 
 The initial version that was available to `crates.io`.
