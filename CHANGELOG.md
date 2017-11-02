@@ -9,6 +9,7 @@ Changelog entries are classified using the following labels _(from [keep-a-chang
 - `fixed`: for any bug fixes
 
 ## [0.1.1] - 2017-11-02
+See [code changes](https://github.com/Inner-Heaven/libwhisper-rs/compare/0.1.0...v0.1.1).
 ### Changed
 - Another readme cleanup
 - Session cosntructors (all 3 of them) signature. **BREAKING**
