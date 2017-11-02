@@ -88,15 +88,15 @@ pub struct ServerSession {
 }
 impl ServerSession {
     /// Server side session.
-    pub fn new(local_identity_keypair: &KeyPair, remote_session_key: &PublicKey) -> ServerSession {
+    pub fn new(local_identity_keypair: KeyPair, remote_session_key: PublicKey) -> ServerSession {
         let now = Utc::now();
         ServerSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
             created_at: now,
             local_session_keypair: KeyPair::new(),
             local_identity_keypair:
-                local_identity_keypair.clone(),
-            remote_session_key: remote_session_key.clone(),
+                local_identity_keypair,
+            remote_session_key: remote_session_key,
             remote_identity_key: None,
             state: SessionState::Fresh,
         }
@@ -192,8 +192,8 @@ impl ServerSession {
         self.state = SessionState::Ready;
         self.remote_identity_key = Some(*client_identity_key);
 
-        let session = EstablishedSession::new(&self.remote_session_key,
-                                              &self.local_session_keypair);
+        let session = EstablishedSession::new(self.remote_session_key.clone(),
+                                              self.local_session_keypair.clone());
         let (nonce, payload) = session.seal_msg(READY_PAYLOAD);
         let frame = Frame {
             id: initiate.id,
@@ -219,16 +219,16 @@ pub struct ClientSession {
 impl ClientSession {
     /// Create new session. This method is private because it will create
     /// session with a few missing values.
-    pub fn new(local_identity_keypair: &KeyPair, remote_identity_key: &PublicKey) -> ClientSession {
+    pub fn new(local_identity_keypair: KeyPair, remote_identity_key: PublicKey) -> ClientSession {
         let now = Utc::now();
         ClientSession {
             expire_at: now + Duration::minutes(HANDSHAKE_DURATION),
             created_at: now,
             local_session_keypair: KeyPair::new(),
             local_identity_keypair:
-                local_identity_keypair.clone(),
+                local_identity_keypair,
             remote_session_key: None,
-            remote_identity_key: remote_identity_key.clone(),
+            remote_identity_key: remote_identity_key,
             state: SessionState::Fresh,
         }
     }
@@ -294,8 +294,8 @@ impl ClientSession {
             return Err(WhisperError::InvalidSessionState);
         }
         // This can never fail when used properly.
-        let session = EstablishedSession::new(&self.remote_session_key.unwrap(),
-                                              &self.local_session_keypair);
+        let session = EstablishedSession::new(self.remote_session_key.unwrap().clone(),
+                                              self.local_session_keypair.clone());
         let msg = session.read_msg(ready)?;
         if msg.as_ref() == READY_PAYLOAD {
             self.state = SessionState::Ready;
@@ -336,8 +336,8 @@ pub struct EstablishedSession {
 impl EstablishedSession {
     /// Create EstablishSession by precomputing shared secret. Don't use this
     /// directly.
-    pub fn new(remote_session_key: &PublicKey,
-               local_session_keypair: &KeyPair)
+    pub fn new(remote_session_key: PublicKey,
+               local_session_keypair: KeyPair)
                -> EstablishedSession {
         let now = Utc::now();
         let our_precomputed_key = box_::precompute(&remote_session_key,
@@ -431,9 +431,9 @@ mod test {
         let client_identity_keypair = KeyPair::new();
         let server_identity_keypair = KeyPair::new();
         let mut client_session =
-            ClientSession::new(&client_identity_keypair,
-                               &server_identity_keypair.public_key);
-        let mut server_session = ServerSession::new(&server_identity_keypair, &client_session.id());
+            ClientSession::new(client_identity_keypair.clone(),
+                               server_identity_keypair.public_key.clone());
+        let mut server_session = ServerSession::new(server_identity_keypair, client_session.id().clone());
         let hello_frame = client_session.make_hello();
         let welcome_frame =
             server_session.make_welcome(&hello_frame)
@@ -458,7 +458,7 @@ mod test {
         let local = KeyPair::new();
         let remote = KeyPair::new();
 
-        let client_session = ClientSession::new(&local, &remote.public_key);
+        let client_session = ClientSession::new(local, remote.public_key.clone());
         assert!(!client_session.is_expired());
     }
 
@@ -467,7 +467,7 @@ mod test {
         let local = KeyPair::new();
         let remote = KeyPair::new();
 
-        let server_session = ServerSession::new(&local, &remote.public_key);
+        let server_session = ServerSession::new(local, remote.public_key.clone());
         assert!(!server_session.is_expired());
     }
 
@@ -477,9 +477,9 @@ mod test {
         let server_identity_keypair = KeyPair::new();
 
         let mut client_session =
-            ClientSession::new(&client_identity_keypair,
-                               &server_identity_keypair.public_key);
-        let mut server_session = ServerSession::new(&server_identity_keypair, &client_session.id());
+            ClientSession::new(client_identity_keypair.clone(),
+                               server_identity_keypair.public_key.clone());
+        let mut server_session = ServerSession::new(server_identity_keypair.clone(), client_session.id().clone());
         assert_eq!(client_session.state, SessionState::Fresh);
         assert_eq!(server_session.state, SessionState::Fresh);
         assert_eq!(client_session.id(), server_session.id());
