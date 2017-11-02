@@ -29,36 +29,6 @@
 //!
 //! ## Usage
 //! TODO: Write usage instructions here
-//!
-//! ## Development
-//! Right now I'm using taskwarrior for task management, which is obviously
-//! won't scale for more than one developer. I use `@andoriyu` handle pretty
-//! much everywhere you can find me either on gitter, IRC, //!twitter, whatever
-//! and ask for a task or tell me how much this library suck.
-//!
-//! ## Questions I would be asking
-//! #### Do I need any help?
-//!
-//! Yes.
-//!
-//! #### Is it secure?
-//!
-//! Maybe, maybe not. I'm not a cryptographer. However, this protocol is based
-//! on CurveZMQ. I didn't write my own implementation of cryptographic
-//! primitives. This library relies on `libsodium`.
-//!
-//! ##### Why does it use secp256k1 at the beginning instead of Curve25519?
-//!
-//! Because I had a dream where I built ethereum wallet with p2p direct
-//! messaging. Therefore, I ended up using secp256k1 public keys for identity.
-//! First attempt was using Curve25519. After some discussions, I've decided to
-//! switch back to Curve25519.
-//!
-//! #### What other languages it supports?
-//!
-//! Right now — only rust. In a very close feature — C via rust library. Next
-//! step is Ruby via c library. After that pure Kotlin implementation.
-
 
 extern crate chrono;
 extern crate sodiumoxide;

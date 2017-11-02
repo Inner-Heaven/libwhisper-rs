@@ -13,8 +13,21 @@ This library doesn't handle anything else like request routing, RPC, etc. The pl
  This library in no way production or even development ready. Meaning everything including wire format is subject to change.
 The goal is to have at least three languages talking to each other using this protocol by the end of 2017.
 
+## Installation
+`libwhisper` is available on crates.io and can be included in your Cargo enabled project like this:
+
+```
+[dependencies]
+libwhisper = "0.1.0"
+```
+
+Nore that library is under development and public API might change. Protocol is stable.
+
 ## Usage
-TODO: Write usage instructions here
+Well... There is not much you can do with it right now. Right now [unit tests](https://github.com/Inner-Heaven/libwhisper-rs/blob/master/src/session.rs#L425) is the best usage example. Sorry.
+
+## Next Steps
+I'm waiting on tokio to stabilize to start working on service layer of this protocol. Ideally service layer will me designed in a way tokio can be swapped...good ol' threads for example. 
 
 ## Development
 Right now I'm using taskwarrior for task management, which is obviously won't scale for more than one developer. I use `@andoriyu` handle pretty much everywhere you can find me either on gitter, IRC, twitter, whatever and ask for a task or tell me how much this library suck. 
