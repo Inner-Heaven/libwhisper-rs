@@ -41,3 +41,4 @@ extern crate nom;
 pub mod session;
 pub mod frame;
 pub mod errors;
+pub mod crypto;

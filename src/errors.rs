@@ -32,6 +32,9 @@ quick_error! {
         BadFrame {}
         /// Trying to use expired session.
         ExpiredSession {}
+        /// Initialization of libsodium failed.
+        /// This might happen when machine just booted and doesn't have enough entropy.
+        InitializationFailed {}
     }
 }
 
