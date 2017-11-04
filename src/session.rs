@@ -20,14 +20,16 @@
 //! The protocol allows bi-directorial message exchange. However,
 //! implementation of that is not part of the protocol.
 
+
 use bytes::Bytes;
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 use errors::{WhisperError, WhisperResult};
+use sodiumoxide::crypto::box_;
+use sodiumoxide::crypto::box_::{Nonce, PrecomputedKey, PublicKey};
 
 use frame::{Frame, FrameKind};
-use sodiumoxide::crypto::box_;
-use sodiumoxide::crypto::box_::{Nonce, PrecomputedKey, PublicKey, SecretKey};
+use crypto::KeyPair;
 
 /// Array of null bytes used in Hello package. Needs to be bigger than Welcome
 /// frame to prevent amplification attacks. Maybe, 256 is too much...who knows?
@@ -39,26 +41,6 @@ pub static READY_PAYLOAD: &'static [u8; 16] = b"My body is ready";
 pub static HANDSHAKE_DURATION: i64 = 3;
 /// How much time one shared secret can last.
 pub static SESSION_DURATION: i64 = 55;
-
-/// A keypair. This is just a helper type.
-#[derive(Debug, Clone)]
-pub struct KeyPair {
-    /// Public key.
-    pub public_key: PublicKey,
-    /// Secret key.
-    pub secret_key: SecretKey,
-}
-impl KeyPair {
-    /// Generate new keypair using libsodium.
-    #[inline]
-    pub fn new() -> KeyPair {
-        let (public_key, secret_key) = box_::gen_keypair();
-        KeyPair {
-            secret_key: secret_key,
-            public_key: public_key,
-        }
-    }
-}
 
 /// Enum representing session state.
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -425,6 +407,7 @@ impl Session for EstablishedSession {
 mod test {
     use frame::FrameKind;
     use session::{ClientSession, EstablishedSession, KeyPair, ServerSession, Session, SessionState};
+    use crypto::init;
 
     /// Helper to create two established sessions.
     fn handshake() -> (EstablishedSession, EstablishedSession) {
@@ -473,6 +456,7 @@ mod test {
 
     #[test]
     fn test_successful_hashshake() {
+        init().unwrap();
         let client_identity_keypair = KeyPair::new();
         let server_identity_keypair = KeyPair::new();
 
